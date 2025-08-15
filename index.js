@@ -204,7 +204,7 @@ function updateVisualization() {
 
   // Create timeline numbers with dynamic spacing
   const numberStep = Math.max(1, Math.floor(state.IT / 12));
-  for (let i = 0; i <= state.IT; i += numberStep) {
+  for (let i = 1; i <= state.IT; i += numberStep) {
     const numberEl = document.createElement("div");
     numberEl.className = "timeline-number";
     if (i % (numberStep * 2) === 0 || i === 0 || i === state.IT) {
@@ -275,6 +275,8 @@ function updateVisualization() {
   const icViewportMarker = document.createElement("div");
   icViewportMarker.className = "position-marker ic-marker";
   icViewportMarker.style.left = getPosition(state.IC_Viewport) + "px";
+  icViewportMarker.dataset.marker = "icViewport";
+
   const icViewportLabel = document.createElement("div");
   icViewportLabel.className = "marker-label ic-label";
   icViewportLabel.textContent = `IC_V (${state.IC_Viewport})`;
@@ -286,6 +288,8 @@ function updateVisualization() {
     const icConstrainedMarker = document.createElement("div");
     icConstrainedMarker.className = "position-marker ic-constrained-marker";
     icConstrainedMarker.style.left = getPosition(state.IC) + "px";
+    icConstrainedMarker.dataset.marker = "ic";
+
     const icConstrainedLabel = document.createElement("div");
     icConstrainedLabel.className = "marker-label ic-constrained-label";
     icConstrainedLabel.textContent = `IC (${state.IC})`;
@@ -297,6 +301,8 @@ function updateVisualization() {
   const limLMarker = document.createElement("div");
   limLMarker.className = "position-marker limit-marker";
   limLMarker.style.left = getPosition(state.LimL) + "px";
+  limLMarker.dataset.marker = "limL";
+
   const limLLabel = document.createElement("div");
   limLLabel.className = "marker-label limit-label";
   limLLabel.textContent = `LimL (${state.LimL})`;
@@ -306,6 +312,8 @@ function updateVisualization() {
   const limUMarker = document.createElement("div");
   limUMarker.className = "position-marker limit-marker";
   limUMarker.style.left = getPosition(state.LimU) + "px";
+  limUMarker.dataset.marker = "limU";
+
   const limULabel = document.createElement("div");
   limULabel.className = "marker-label limit-label";
   limULabel.textContent = `LimU (${state.LimU})`;
@@ -318,6 +326,8 @@ function updateVisualization() {
       const winLMarker = document.createElement("div");
       winLMarker.className = "position-marker window-boundary";
       winLMarker.style.left = getPosition(state.WinL) + "px";
+      winLMarker.dataset.marker = "winL";
+
       const winLLabel = document.createElement("div");
       winLLabel.className = "marker-label window-label";
       winLLabel.textContent = `WinL (${state.WinL})`;
@@ -329,6 +339,8 @@ function updateVisualization() {
       const winUMarker = document.createElement("div");
       winUMarker.className = "position-marker window-boundary";
       winUMarker.style.left = getPosition(state.WinU) + "px";
+      winUMarker.dataset.marker = "winU";
+
       const winULabel = document.createElement("div");
       winULabel.className = "marker-label window-label";
       winULabel.textContent = `WinU (${state.WinU})`;
@@ -337,12 +349,122 @@ function updateVisualization() {
     }
   }
 
+  // If Marker is being dragged
+  if (dragging) {
+    const marker = positionMarkers.querySelector(
+      `.position-marker[data-marker="${dragging.type}"]`
+    );
+    if (marker) {
+      console.log(marker);
+      marker.classList.add("dragging");
+    }
+  }
   // Set container widths
   timelineNumbers.style.width = containerWidth + "px";
   windowRegions.parentElement.style.width = containerWidth + "px";
   positionMarkers.style.width = containerWidth + "px";
   //   compensationIndicators.style.width = containerWidth + "px";
 }
+// --- Drag support for markers ---
+let dragging = null; // { type: 'icViewport'|'limL'|'limU'|'winL'|'winU' }
+const positionLayer = document.getElementById("positionMarkers");
+
+function pxToValue(clientX) {
+  const rect = positionLayer.getBoundingClientRect();
+  const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+  return Math.round((x / rect.width) * state.IT);
+}
+
+function startDrag(target) {
+  const type = target?.dataset?.marker;
+  if (!type) return;
+  // Make constrained IC read-only (comment next line to enable)
+  if (type === "ic") return;
+  dragging = { type };
+  target.classList.add("dragging");
+  document.documentElement.style.cursor = "grabbing";
+  document.documentElement.classList.add("no-scroll");
+}
+
+function endDrag() {
+  if (!dragging) return;
+  const els = positionLayer.querySelectorAll(".position-marker.dragging");
+  els.forEach((el) => el.classList.remove("dragging"));
+  dragging = null;
+  document.documentElement.classList.remove("no-scroll");
+
+  document.documentElement.style.cursor = "default";
+}
+
+function doDrag(clientX) {
+  if (!dragging) return;
+  const val = Math.max(0, Math.min(state.IT, pxToValue(clientX)));
+
+  switch (dragging.type) {
+    case "icViewport":
+      state.IC_Viewport = val;
+      elements.icViewportSlider.value = state.IC_Viewport;
+      break;
+    case "limL":
+      state.LimL = val;
+      elements.limLSlider.value = state.LimL;
+      break;
+    case "limU":
+      state.LimU = val;
+      elements.limUSlider.value = state.LimU;
+      break;
+    case "winL": {
+      // adjust WinN around current IC_Viewport
+      const newLen = Math.max(0, (state.IC_Viewport - val) * 2);
+      state.WinN = Math.min(parseInt(elements.winNSlider.max), newLen);
+      elements.winNSlider.value = state.WinN;
+      break;
+    }
+    case "winU": {
+      const newLen = Math.max(0, (val - state.IC_Viewport) * 2);
+      state.WinN = Math.min(parseInt(elements.winNSlider.max), newLen);
+      elements.winNSlider.value = state.WinN;
+      break;
+    }
+  }
+  updateDisplay();
+}
+
+// Mouse
+positionLayer.addEventListener("mousedown", (e) => {
+  const m = e.target.closest(".position-marker");
+  if (!m) return;
+  startDrag(m);
+});
+
+window.addEventListener("mousemove", (e) => doDrag(e.clientX));
+window.addEventListener("mouseup", endDrag);
+
+// Touch
+positionLayer.addEventListener(
+  "touchstart",
+  (e) => {
+    const m = e.target.closest(".position-marker");
+    if (!m) return;
+    startDrag(m);
+    if (e.cancelable) e.preventDefault();
+  },
+  { passive: false }
+);
+
+window.addEventListener(
+  "touchmove",
+  (e) => {
+    const t = e.touches[0];
+    if (!t) return;
+    doDrag(t.clientX);
+  },
+  { passive: false }
+);
+
+window.addEventListener("touchend", endDrag);
+window.addEventListener("touchcancel", endDrag);
+// --- end drag support ---
 
 // Update all displays
 function updateDisplay() {
