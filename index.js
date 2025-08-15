@@ -2,7 +2,7 @@
 let state = {
   IC_Viewport: 123, // Unconstrained center from viewport
   IC: 123, // Constrained center (affected by limits)
-  WinN: 20,
+  WinN: 40,
   LimU: 148,
   LimL: 99,
   WinU: 0,
@@ -19,13 +19,13 @@ state.IC = Math.max(
 // Get DOM elements
 const elements = {
   icViewportSlider: document.getElementById("icViewportSlider"),
-  icSlider: document.getElementById("icSlider"),
+  //   icSlider: document.getElementById("icSlider"),
   winNSlider: document.getElementById("winNSlider"),
   limUSlider: document.getElementById("limUSlider"),
   limLSlider: document.getElementById("limLSlider"),
   itSlider: document.getElementById("itSlider"),
   icViewportValue: document.getElementById("icViewportValue"),
-  icValue: document.getElementById("icValue"),
+  //   icValue: document.getElementById("icValue"),
   winNValue: document.getElementById("winNValue"),
   limUValue: document.getElementById("limUValue"),
   limLValue: document.getElementById("limLValue"),
@@ -60,10 +60,7 @@ function getEffectiveWinN() {
   const maxPossibleByTotal = state.IT;
   const maxPossible = Math.min(maxPossibleByLimits, maxPossibleByTotal);
 
-  const effectiveLength = Math.min(
-    state.WinN,
-    Math.max(0, Math.floor(maxPossible / 2) * 2)
-  );
+  const effectiveLength = Math.min(state.WinN, Math.max(0, maxPossible));
   return effectiveLength;
 }
 
@@ -153,7 +150,7 @@ function enforceConstraints() {
   elements.icViewportSlider.max = state.IT;
   elements.limUSlider.max = state.IT;
   elements.limLSlider.max = state.IT;
-  elements.winNSlider.max = Math.floor(state.IT / 2) * 2;
+  //   elements.winNSlider.max = Math.floor(state.IT / 2);
 
   // Ensure values don't exceed IT
   if (state.IC_Viewport > state.IT) {
@@ -202,7 +199,7 @@ function updateVisualization() {
   //   compensationIndicators.innerHTML = "";
 
   // Use responsive width
-  const containerWidth = Math.min(timelineContainer.offsetWidth, 800);
+  const containerWidth = timelineContainer.offsetWidth;
   const getPosition = (value) => (value / state.IT) * containerWidth;
 
   // Create timeline numbers with dynamic spacing
@@ -358,16 +355,18 @@ function updateDisplay() {
 
   // Update control values
   elements.icViewportValue.textContent = `${state.IC_Viewport} (free: 0-${state.IT})`;
-  elements.icValue.textContent = `${state.IC} (auto-calculated)`;
-  elements.winNValue.textContent = `${state.WinN} (compensates to: ${effectiveWinN})`;
-  elements.itValue.textContent = `${state.IT} (system capacity)`;
-  elements.limUValue.textContent = `${state.LimU} (auto-adjusts with LimL: 0-${state.IT})`;
-  elements.limLValue.textContent = `${state.LimL} (auto-adjusts with LimU: 0-${state.IT})`;
+  //   elements.icValue.textContent = `${state.IC} (auto-calculated)`;
+  elements.winNValue.textContent =
+    `${state.WinN}` +
+    (effectiveWinN != state.WinN ? ` (compensates to: ${effectiveWinN})` : "");
+  elements.limLValue.textContent = `${state.LimL} (auto-adjusts with LimU: ${state.LimU}-${state.IT})`;
+  elements.limUValue.textContent = `${state.LimU} (auto-adjusts with LimL: 0-${state.LimL})`;
+  elements.itValue.textContent = `${state.IT}`;
 
   // Update constrained IC slider position (but keep it disabled)
-  elements.icSlider.value = state.IC;
-  elements.icSlider.min = icConstraints.min;
-  elements.icSlider.max = icConstraints.max;
+  //   elements.icSlider.value = state.IC;
+  //   elements.icSlider.min = icConstraints.min;
+  //   elements.icSlider.max = icConstraints.max;
 
   // Update status
   elements.icViewportStatus.textContent = state.IC_Viewport;
@@ -466,9 +465,9 @@ elements.timelineTrack.addEventListener("wheel", (e) => {
     let step = 2;
     if (e.shiftKey) step = 6;
     if (e.deltaY < 0) {
-      state.WinN += step;
+      state.WinN = Math.min(state.WinN + step, elements.winNSlider.max);
     } else if (e.deltaY > 0) {
-      state.WinN -= step;
+      state.WinN = Math.max(0, state.WinN - step);
     }
 
     elements.winNSlider.value = state.WinN;
@@ -476,9 +475,9 @@ elements.timelineTrack.addEventListener("wheel", (e) => {
     let step = 1;
     if (e.shiftKey) step = 10;
     if (e.deltaY < 0) {
-      state.IC_Viewport += step;
+      state.IC_Viewport = Math.min(state.IC_Viewport + step, state.IT);
     } else if (e.deltaY > 0) {
-      state.IC_Viewport -= step;
+      state.IC_Viewport = Math.max(0, state.IC_Viewport - step);
     }
 
     elements.icViewportSlider.value = state.IC_Viewport;
@@ -492,7 +491,7 @@ elements.icViewportSlider.addEventListener("input", (e) => {
 });
 
 elements.winNSlider.addEventListener("input", (e) => {
-  state.WinN = parseInt(e.target.value) * 2;
+  state.WinN = parseInt(e.target.value);
   updateDisplay();
 });
 
