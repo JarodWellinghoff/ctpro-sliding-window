@@ -461,15 +461,28 @@ elements.timelineTrack.addEventListener("mouseout", (e) => {
 
 elements.timelineTrack.addEventListener("wheel", (e) => {
   // If scroll up
-  let step = 1;
-  if (e.shiftKey) step = 10;
 
-  if (e.deltaY < 0) {
-    state.IC_Viewport = state.IC_Viewport + step;
-  } else if (e.deltaY > 0) {
-    state.IC_Viewport = state.IC_Viewport - step;
+  if (e.altKey) {
+    let step = 2;
+    if (e.shiftKey) step = 6;
+    if (e.deltaY < 0) {
+      state.WinN += step;
+    } else if (e.deltaY > 0) {
+      state.WinN -= step;
+    }
+
+    elements.winNSlider.value = state.WinN;
+  } else {
+    let step = 1;
+    if (e.shiftKey) step = 10;
+    if (e.deltaY < 0) {
+      state.IC_Viewport += step;
+    } else if (e.deltaY > 0) {
+      state.IC_Viewport -= step;
+    }
+
+    elements.icViewportSlider.value = state.IC_Viewport;
   }
-  elements.icViewportSlider.value = state.IC_Viewport;
   updateDisplay();
 });
 

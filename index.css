@@ -11,7 +11,12 @@ body {
   color: #333;
   background-color: #f9fafb;
 }
-
+.container2 {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: center;
+}
 .container {
   max-width: 1200px;
   margin: 0 auto;
