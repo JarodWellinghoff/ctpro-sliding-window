@@ -8,13 +8,13 @@ let state = {
   WinU: 0,
   WinL: 0,
   IT: 321, // Now user-controllable
+  effectiveWinN: 40,
+  dragging: null, // { type: 'icViewport'|'limL'|'limU'|'winL'|'winU' }
+  issues: [],
 };
 
-// Initialize state.IC properly
-state.IC = Math.max(
-  Math.max(0, state.LimL),
-  Math.min(state.LimU, Math.min(state.IT, state.IC_Viewport))
-);
+// --- Drag support for markers ---
+const positionLayer = document.getElementById("positionMarkers");
 
 // Get DOM elements
 const elements = {
@@ -48,34 +48,32 @@ const elements = {
   currentConstraints: document.getElementById("currentConstraints"),
   icConstraintText: document.getElementById("icConstraintText"),
   lengthCompensationText: document.getElementById("lengthCompensationText"),
-  timelineTrack: document.getElementById("timelineTrack"),
-  container2: document.getElementById("container2"),
+  timelineContainer: document.getElementById("timelineContainer"),
 };
 
 // Calculate effective window length
 function getEffectiveWinN() {
-  if (state.WinN === 0) return 0;
+  if (state.WinN === 0) {
+    state.effectiveWinN = 0;
+  } else {
+    const maxPossibleByLimits = state.LimU - state.LimL;
+    const maxPossibleByTotal = state.IT;
+    const maxPossible = Math.min(maxPossibleByLimits, maxPossibleByTotal);
 
-  const maxPossibleByLimits = state.LimU - state.LimL;
-  const maxPossibleByTotal = state.IT;
-  const maxPossible = Math.min(maxPossibleByLimits, maxPossibleByTotal);
-
-  const effectiveLength = Math.min(state.WinN, Math.max(0, maxPossible));
-  return effectiveLength;
+    state.effectiveWinN = Math.min(state.WinN, Math.max(0, maxPossible));
+  }
 }
 
 // Calculate window boundaries
 function calculateWindowBoundaries() {
-  const effectiveWinN = getEffectiveWinN();
-
-  if (effectiveWinN === 0) {
+  if (state.effectiveWinN === 0) {
     state.WinU = state.IC;
     state.WinL = state.IC;
     return;
   }
 
-  const idealWinU = state.IC + effectiveWinN / 2;
-  const idealWinL = state.IC - effectiveWinN / 2;
+  const idealWinU = state.IC + state.effectiveWinN / 2;
+  const idealWinL = state.IC - state.effectiveWinN / 2;
 
   let finalWinU, finalWinL;
 
@@ -87,76 +85,65 @@ function calculateWindowBoundaries() {
     finalWinL = idealWinL;
   } else if (idealWinU > Math.min(state.LimU, state.IT)) {
     finalWinU = Math.min(state.LimU, state.IT);
-    finalWinL = finalWinU - effectiveWinN;
+    finalWinL = finalWinU - state.effectiveWinN;
   } else if (idealWinL < Math.max(state.LimL, 0)) {
     finalWinL = Math.max(state.LimL, 0);
-    finalWinU = finalWinL + effectiveWinN;
+    finalWinU = finalWinL + state.effectiveWinN;
   }
 
   state.WinU = finalWinU;
   state.WinL = finalWinL;
 }
 
-// Get IC constraints
-function getICConstraints() {
-  const min = Math.max(0, state.LimL);
-  const max = Math.min(state.IT, state.LimU);
-  return { min, max };
-}
-
 // Detect constraint issues
 function detectConstraintIssues() {
-  const issues = [];
+  state.issues = [];
 
   if (state.WinL < 0) {
-    issues.push(
+    state.issues.push(
       `Lower window boundary (${state.WinL}) below absolute minimum (0)`
     );
   }
   if (state.WinU > state.IT) {
-    issues.push(
+    state.issues.push(
       `Upper window boundary (${state.WinU}) above absolute maximum (${state.IT})`
     );
   }
   if (state.IC < state.LimL) {
-    issues.push(
+    state.issues.push(
       `Current image (${state.IC}) below lower limit (${state.LimL})`
     );
   }
   if (state.IC > state.LimU) {
-    issues.push(
+    state.issues.push(
       `Current image (${state.IC}) above upper limit (${state.LimU})`
     );
   }
-
-  return issues;
 }
 
 // Enforce constraints
 function enforceConstraints() {
   // Ensure limits don't invert
-  if (state.LimL > state.LimU) {
-    state.LimU = state.LimL;
-    elements.limUSlider.value = state.LimU;
-    elements.limUSlider.max = state.IT;
+  if (state.LimU <= state.LimL || state.LimL > state.LimU) {
+    const tempLimL = state.LimU;
+    const tempLimU = state.LimL;
+    state.LimL = tempLimL;
+    state.LimU = tempLimU;
   }
-  if (state.LimU < state.LimL) {
-    state.LimL = state.LimU;
-    elements.limLSlider.value = state.LimL;
-    elements.limLSlider.max = state.IT;
-  }
+
+  elements.limLSlider.value = state.LimL;
+  elements.limUSlider.value = state.LimU;
+  // Update slider values if limits were adjusted
 
   // Update slider maximums when IT changes
-  elements.icViewportSlider.max = state.IT;
-  elements.limUSlider.max = state.IT;
   elements.limLSlider.max = state.IT;
-  //   elements.winNSlider.max = Math.floor(state.IT / 2);
+  elements.limUSlider.max = state.IT;
+  elements.icViewportSlider.max = state.IT;
+  elements.winNSlider.max = state.IT;
 
   // Ensure values don't exceed IT
-  if (state.IC_Viewport > state.IT) {
-    state.IC_Viewport = state.IT;
-    elements.icViewportSlider.value = state.IC_Viewport;
-  }
+  state.IC_Viewport = Math.min(state.IC_Viewport, state.IT);
+  elements.icViewportSlider.value = state.IC_Viewport;
   if (state.LimU > state.IT) {
     state.LimU = state.IT;
     elements.limUSlider.value = state.LimU;
@@ -179,8 +166,19 @@ function calculateConstrainedIC() {
   const lowerBound = Math.max(0, state.LimL);
   const upperBound = Math.min(state.LimU, state.IT);
 
-  // Clamp IC_Viewport within the valid bounds
-  state.IC = Math.max(lowerBound, Math.min(upperBound, state.IC_Viewport));
+  if (upperBound - lowerBound < state.WinN) {
+    state.IC = Math.round((upperBound + lowerBound) / 2);
+  } else {
+    // Clamp IC_Viewport within the valid bounds
+    state.IC = state.IC_Viewport;
+    if (state.IC - Math.round(state.WinN / 2) < lowerBound) {
+      state.IC = lowerBound + Math.round(state.WinN / 2);
+    }
+    if (state.IC + Math.round(state.WinN / 2) + 1 > upperBound) {
+      state.IC = upperBound - Math.round(state.WinN / 2);
+    }
+    state.IC = Math.min(upperBound, Math.max(lowerBound, state.IC));
+  }
 }
 // Update visualization with horizontal timeline
 function updateVisualization() {
@@ -203,7 +201,7 @@ function updateVisualization() {
   const getPosition = (value) => (value / state.IT) * containerWidth;
 
   // Create timeline numbers with dynamic spacing
-  const numberStep = Math.max(1, Math.floor(state.IT / 12));
+  const numberStep = Math.max(1, Math.round(state.IT / 12));
   for (let i = 1; i <= state.IT; i += numberStep) {
     const numberEl = document.createElement("div");
     numberEl.className = "timeline-number";
@@ -224,10 +222,8 @@ function updateVisualization() {
     timelineNumbers.appendChild(numberEl);
   }
 
-  const effectiveWinN = getEffectiveWinN();
-
   // Create window regions
-  if (effectiveWinN > 0) {
+  if (state.effectiveWinN > 0) {
     // Lower window region (IC_Viewport to WinL)
     if (state.WinL < state.IC) {
       const lowerRegion = document.createElement("div");
@@ -321,7 +317,7 @@ function updateVisualization() {
   positionMarkers.appendChild(limUMarker);
 
   // Window boundary markers (if different from IC_Viewport)
-  if (effectiveWinN > 0) {
+  if (state.effectiveWinN > 0) {
     if (state.WinL !== state.IC_Viewport) {
       const winLMarker = document.createElement("div");
       winLMarker.className = "position-marker window-boundary";
@@ -350,12 +346,11 @@ function updateVisualization() {
   }
 
   // If Marker is being dragged
-  if (dragging) {
+  if (state.dragging) {
     const marker = positionMarkers.querySelector(
-      `.position-marker[data-marker="${dragging.type}"]`
+      `.position-marker[data-marker="${state.dragging.type}"]`
     );
     if (marker) {
-      console.log(marker);
       marker.classList.add("dragging");
     }
   }
@@ -365,9 +360,6 @@ function updateVisualization() {
   positionMarkers.style.width = containerWidth + "px";
   //   compensationIndicators.style.width = containerWidth + "px";
 }
-// --- Drag support for markers ---
-let dragging = null; // { type: 'icViewport'|'limL'|'limU'|'winL'|'winU' }
-const positionLayer = document.getElementById("positionMarkers");
 
 function pxToValue(clientX) {
   const rect = positionLayer.getBoundingClientRect();
@@ -380,27 +372,46 @@ function startDrag(target) {
   if (!type) return;
   // Make constrained IC read-only (comment next line to enable)
   if (type === "ic") return;
-  dragging = { type };
+  state.dragging = { type };
   target.classList.add("dragging");
   document.documentElement.style.cursor = "grabbing";
   document.documentElement.classList.add("no-scroll");
 }
 
+function startHover(target) {
+  if (state.dragging) return;
+  const type = target?.dataset?.marker;
+  if (!type) return;
+  // Make constrained IC read-only (comment next line to enable)
+  if (type === "ic") return;
+  target.classList.add("hover");
+  document.documentElement.style.cursor = "grab";
+}
+
+function endHover(target) {
+  if (state.dragging) return;
+  const type = target?.dataset?.marker;
+  if (!type) return;
+  target.classList.remove("hover");
+  document.documentElement.style.cursor = "default";
+}
+
 function endDrag() {
-  if (!dragging) return;
+  if (!state.dragging) return;
   const els = positionLayer.querySelectorAll(".position-marker.dragging");
   els.forEach((el) => el.classList.remove("dragging"));
-  dragging = null;
+  state.dragging = null;
   document.documentElement.classList.remove("no-scroll");
 
   document.documentElement.style.cursor = "default";
 }
 
 function doDrag(clientX) {
-  if (!dragging) return;
+  if (!state.dragging) return;
   const val = Math.max(0, Math.min(state.IT, pxToValue(clientX)));
+  console.log(`Dragging ${state.dragging.type}: ${val}`);
 
-  switch (dragging.type) {
+  switch (state.dragging.type) {
     case "icViewport":
       state.IC_Viewport = val;
       elements.icViewportSlider.value = state.IC_Viewport;
@@ -413,19 +424,12 @@ function doDrag(clientX) {
       state.LimU = val;
       elements.limUSlider.value = state.LimU;
       break;
-    case "winL": {
-      // adjust WinN around current IC_Viewport
-      const newLen = Math.max(0, (state.IC_Viewport - val) * 2);
+    case "winL":
+    case "winU":
+      const newLen = Math.abs(val - state.IC) * 2;
       state.WinN = Math.min(parseInt(elements.winNSlider.max), newLen);
       elements.winNSlider.value = state.WinN;
       break;
-    }
-    case "winU": {
-      const newLen = Math.max(0, (val - state.IC_Viewport) * 2);
-      state.WinN = Math.min(parseInt(elements.winNSlider.max), newLen);
-      elements.winNSlider.value = state.WinN;
-      break;
-    }
   }
   updateDisplay();
 }
@@ -437,8 +441,22 @@ positionLayer.addEventListener("mousedown", (e) => {
   startDrag(m);
 });
 
-window.addEventListener("mousemove", (e) => doDrag(e.clientX));
-window.addEventListener("mouseup", endDrag);
+positionLayer.addEventListener("mouseover", (e) => {
+  const m = e.target.closest(".position-marker");
+  if (!m) return;
+  startHover(m);
+});
+
+positionLayer.addEventListener("mouseout", (e) => {
+  const m = e.target.closest(".position-marker");
+  if (!m) return;
+  endHover(m);
+});
+
+elements.timelineContainer.addEventListener("mousemove", (e) =>
+  doDrag(e.clientX)
+);
+elements.timelineContainer.addEventListener("mouseup", endDrag);
 
 // Touch
 positionLayer.addEventListener(
@@ -452,7 +470,7 @@ positionLayer.addEventListener(
   { passive: false }
 );
 
-window.addEventListener(
+elements.timelineContainer.addEventListener(
   "touchmove",
   (e) => {
     const t = e.touches[0];
@@ -462,33 +480,29 @@ window.addEventListener(
   { passive: false }
 );
 
-window.addEventListener("touchend", endDrag);
-window.addEventListener("touchcancel", endDrag);
+elements.timelineContainer.addEventListener("touchend", endDrag);
+elements.timelineContainer.addEventListener("touchcancel", endDrag);
 // --- end drag support ---
 
 // Update all displays
 function updateDisplay() {
   enforceConstraints();
+  getEffectiveWinN();
   calculateWindowBoundaries();
-
-  const effectiveWinN = getEffectiveWinN();
-  const icConstraints = getICConstraints();
-  const issues = detectConstraintIssues();
+  detectConstraintIssues();
 
   // Update control values
   elements.icViewportValue.textContent = `${state.IC_Viewport} (free: 0-${state.IT})`;
-  //   elements.icValue.textContent = `${state.IC} (auto-calculated)`;
   elements.winNValue.textContent =
     `${state.WinN}` +
-    (effectiveWinN != state.WinN ? ` (compensates to: ${effectiveWinN})` : "");
-  elements.limLValue.textContent = `${state.LimL} (auto-adjusts with LimU: ${state.LimU}-${state.IT})`;
-  elements.limUValue.textContent = `${state.LimU} (auto-adjusts with LimL: 0-${state.LimL})`;
+    (state.effectiveWinN != state.WinN
+      ? ` (compensates to: ${state.effectiveWinN})`
+      : "");
+  elements.limLValue.textContent = `${
+    state.LimL
+  } (auto-adjusts with LimU: ${0}-${state.LimU})`;
+  elements.limUValue.textContent = `${state.LimU} (auto-adjusts with LimL: ${state.LimL}-${state.IT})`;
   elements.itValue.textContent = `${state.IT}`;
-
-  // Update constrained IC slider position (but keep it disabled)
-  //   elements.icSlider.value = state.IC;
-  //   elements.icSlider.min = icConstraints.min;
-  //   elements.icSlider.max = icConstraints.max;
 
   // Update status
   elements.icViewportStatus.textContent = state.IC_Viewport;
@@ -497,7 +511,7 @@ function updateDisplay() {
   elements.winLStatus.textContent = state.WinL;
   elements.actualLength.textContent = state.WinU - state.WinL;
   elements.requestedLength.textContent = state.WinN;
-  elements.effectiveLength.textContent = effectiveWinN;
+  elements.effectiveLength.textContent = state.effectiveWinN;
   elements.totalImages.textContent = state.IT;
 
   // Show/hide warnings
@@ -506,15 +520,15 @@ function updateDisplay() {
   elements.winLWarning.style.display =
     state.WinL < Math.max(state.LimL, 0) ? "block" : "none";
   elements.compensatedIndicator.style.display =
-    state.WinN !== effectiveWinN ? "block" : "none";
+    state.WinN !== state.effectiveWinN ? "block" : "none";
 
   // Update behavior status
   let behavior = "";
-  if (effectiveWinN === 0) {
+  if (state.effectiveWinN === 0) {
     behavior = "Zero Length";
   } else {
-    const idealWinU = state.IC_Viewport + effectiveWinN / 2;
-    const idealWinL = state.IC_Viewport - effectiveWinN / 2;
+    const idealWinU = state.IC_Viewport + state.effectiveWinN / 2;
+    const idealWinL = state.IC_Viewport - state.effectiveWinN / 2;
     const upperHit = idealWinU > Math.min(state.LimU, state.IT);
     const lowerHit = idealWinL < Math.max(state.LimL, 0);
 
@@ -523,21 +537,21 @@ function updateDisplay() {
     else if (lowerHit) behavior = "Upper side compensating";
     else behavior = "Centered normally";
 
-    if (state.WinN !== effectiveWinN) behavior += " + Length reduced";
+    if (state.WinN !== state.effectiveWinN) behavior += " + Length reduced";
   }
   elements.behaviorStatus.textContent = behavior;
 
   // Update configuration status
-  const isValid = issues.length === 0;
+  const isValid = state.issues.length === 0;
   elements.configStatus.textContent = isValid ? "Valid" : "Invalid";
   elements.configStatus.className = isValid
     ? "status-value valid"
     : "status-value invalid";
 
   // Update errors
-  if (issues.length > 0) {
+  if (state.issues.length > 0) {
     elements.errorSection.style.display = "block";
-    elements.errorList.innerHTML = issues
+    elements.errorList.innerHTML = state.issues
       .map((issue) => `<li class="error-item">• ${issue}</li>`)
       .join("");
   } else {
@@ -549,7 +563,7 @@ function updateDisplay() {
     state.IC
   } ≤ ${state.LimU} ≤ ${state.IT}, ${state.WinU} - ${state.WinL} = ${
     state.WinU - state.WinL
-  } (effective: ${effectiveWinN})`;
+  } (effective: ${state.effectiveWinN})`;
   elements.icConstraintText.textContent = `IC = ${
     state.IC
   } (constrained by limits: ${Math.max(0, state.LimL)} ≤ IC ≤ ${Math.min(
@@ -558,7 +572,7 @@ function updateDisplay() {
   )})`;
   elements.lengthCompensationText.textContent = `Requested ${
     state.WinN
-  } → Effective ${effectiveWinN} (limited by space: ${
+  } → Effective ${state.effectiveWinN} (limited by space: ${
     state.LimU - state.LimL
   })`;
 
@@ -572,40 +586,40 @@ function updateDisplay() {
 }
 
 // Event handlers
-elements.timelineTrack.addEventListener("mouseover", (e) => {
-  document.documentElement.classList.add("no-scroll");
-});
+// elements.timelineTrack.addEventListener("mouseover", (e) => {
+//   document.documentElement.classList.add("no-scroll");
+// });
 
-elements.timelineTrack.addEventListener("mouseout", (e) => {
-  document.documentElement.classList.remove("no-scroll");
-});
+// elements.timelineTrack.addEventListener("mouseout", (e) => {
+//   document.documentElement.classList.remove("no-scroll");
+// });
 
-elements.timelineTrack.addEventListener("wheel", (e) => {
-  // If scroll up
+// elements.timelineTrack.addEventListener("wheel", (e) => {
+//   // If scroll up
 
-  if (e.altKey) {
-    let step = 2;
-    if (e.shiftKey) step = 6;
-    if (e.deltaY < 0) {
-      state.WinN = Math.min(state.WinN + step, elements.winNSlider.max);
-    } else if (e.deltaY > 0) {
-      state.WinN = Math.max(0, state.WinN - step);
-    }
+//   if (e.altKey) {
+//     let step = 2;
+//     if (e.shiftKey) step = 6;
+//     if (e.deltaY < 0) {
+//       state.WinN = Math.min(state.WinN + step, elements.winNSlider.max);
+//     } else if (e.deltaY > 0) {
+//       state.WinN = Math.max(0, state.WinN - step);
+//     }
 
-    elements.winNSlider.value = state.WinN;
-  } else {
-    let step = 1;
-    if (e.shiftKey) step = 10;
-    if (e.deltaY < 0) {
-      state.IC_Viewport = Math.min(state.IC_Viewport + step, state.IT);
-    } else if (e.deltaY > 0) {
-      state.IC_Viewport = Math.max(0, state.IC_Viewport - step);
-    }
+//     elements.winNSlider.value = state.WinN;
+//   } else {
+//     let step = 1;
+//     if (e.shiftKey) step = 10;
+//     if (e.deltaY < 0) {
+//       state.IC_Viewport = Math.min(state.IC_Viewport + step, state.IT);
+//     } else if (e.deltaY > 0) {
+//       state.IC_Viewport = Math.max(0, state.IC_Viewport - step);
+//     }
 
-    elements.icViewportSlider.value = state.IC_Viewport;
-  }
-  updateDisplay();
-});
+//     elements.icViewportSlider.value = state.IC_Viewport;
+//   }
+//   updateDisplay();
+// });
 
 elements.icViewportSlider.addEventListener("input", (e) => {
   state.IC_Viewport = parseInt(e.target.value);

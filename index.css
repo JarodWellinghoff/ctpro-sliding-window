@@ -297,21 +297,17 @@ body {
   transition: all 0.2s ease;
 }
 
-.position-marker:hover {
-  transform: translateX(-50%) scale(1.5);
-}
-.position-marker {
-  cursor: grab;
-}
+.position-marker.hover,
 .position-marker.dragging {
-  cursor: grabbing;
   transform: translateX(-50%) scale(1.5);
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
 }
+
 .ic-marker {
   background: #fbbf24;
   border: 2px solid #d97706;
-  height: 60px;
-  top: -10px;
+  height: 70px;
+  top: -15px;
   z-index: 10;
 }
 
