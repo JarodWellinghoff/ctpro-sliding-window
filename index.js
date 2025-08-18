@@ -372,6 +372,8 @@ function startDrag(target) {
   if (!type) return;
   // Make constrained IC read-only (comment next line to enable)
   if (type === "ic") return;
+  if (type === "winU") return;
+  if (type === "winL") return;
   state.dragging = { type };
   target.classList.add("dragging");
   document.documentElement.style.cursor = "grabbing";
@@ -384,6 +386,8 @@ function startHover(target) {
   if (!type) return;
   // Make constrained IC read-only (comment next line to enable)
   if (type === "ic") return;
+  if (type === "winU") return;
+  if (type === "winL") return;
   target.classList.add("hover");
   document.documentElement.style.cursor = "grab";
 }
