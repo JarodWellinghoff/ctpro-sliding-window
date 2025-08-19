@@ -1,54 +1,37 @@
-// State variables
-let state = {
-  IC_Viewport: 123, // Unconstrained center from viewport
-  IC: 123, // Constrained center (affected by limits)
-  WinN: 40,
-  LimU: 148,
-  LimL: 99,
-  WinU: 0,
-  WinL: 0,
-  IT: 321, // Now user-controllable
-  effectiveWinN: 40,
-  dragging: null, // { type: 'icViewport'|'limL'|'limU'|'winL'|'winU' }
-  issues: [],
-};
-
 // --- Drag support for markers ---
 const positionLayer = document.getElementById("positionMarkers");
 
 // Get DOM elements
 const elements = {
   icViewportSlider: document.getElementById("icViewportSlider"),
-  //   icSlider: document.getElementById("icSlider"),
   winNSlider: document.getElementById("winNSlider"),
   limUSlider: document.getElementById("limUSlider"),
   limLSlider: document.getElementById("limLSlider"),
   itSlider: document.getElementById("itSlider"),
   icViewportValue: document.getElementById("icViewportValue"),
-  //   icValue: document.getElementById("icValue"),
   winNValue: document.getElementById("winNValue"),
   limUValue: document.getElementById("limUValue"),
   limLValue: document.getElementById("limLValue"),
   itValue: document.getElementById("itValue"),
-  icViewportStatus: document.getElementById("icViewportStatus"),
   icConstrainedStatus: document.getElementById("icConstrainedStatus"),
   winUStatus: document.getElementById("winUStatus"),
   winLStatus: document.getElementById("winLStatus"),
-  winUWarning: document.getElementById("winUWarning"),
-  winLWarning: document.getElementById("winLWarning"),
   actualLength: document.getElementById("actualLength"),
-  requestedLength: document.getElementById("requestedLength"),
-  effectiveLength: document.getElementById("effectiveLength"),
-  compensatedIndicator: document.getElementById("compensatedIndicator"),
-  behaviorStatus: document.getElementById("behaviorStatus"),
-  configStatus: document.getElementById("configStatus"),
-  totalImages: document.getElementById("totalImages"),
-  errorSection: document.getElementById("errorSection"),
-  errorList: document.getElementById("errorList"),
-  currentConstraints: document.getElementById("currentConstraints"),
-  icConstraintText: document.getElementById("icConstraintText"),
-  lengthCompensationText: document.getElementById("lengthCompensationText"),
   timelineContainer: document.getElementById("timelineContainer"),
+};
+
+// State variables
+let state = {
+  IC_Viewport: parseInt(icViewportSlider.value), // Unconstrained center from viewport
+  IC: parseInt(icViewportSlider.value), // Constrained center (affected by limits)
+  WinN: parseInt(winNSlider.value),
+  LimU: parseInt(limUSlider.value),
+  LimL: parseInt(limLSlider.value),
+  WinU: 0,
+  WinL: 0,
+  IT: parseInt(itSlider.value),
+  effectiveWinN: 40,
+  dragging: null, // { type: 'icViewport'|'limL'|'limU'|'winL'|'winU' }
 };
 
 // Calculate effective window length
@@ -95,32 +78,6 @@ function calculateWindowBoundaries() {
   state.WinL = finalWinL;
 }
 
-// Detect constraint issues
-function detectConstraintIssues() {
-  state.issues = [];
-
-  if (state.WinL < 0) {
-    state.issues.push(
-      `Lower window boundary (${state.WinL}) below absolute minimum (0)`
-    );
-  }
-  if (state.WinU > state.IT) {
-    state.issues.push(
-      `Upper window boundary (${state.WinU}) above absolute maximum (${state.IT})`
-    );
-  }
-  if (state.IC < state.LimL) {
-    state.issues.push(
-      `Current image (${state.IC}) below lower limit (${state.LimL})`
-    );
-  }
-  if (state.IC > state.LimU) {
-    state.issues.push(
-      `Current image (${state.IC}) above upper limit (${state.LimU})`
-    );
-  }
-}
-
 // Enforce constraints
 function enforceConstraints() {
   // Ensure limits don't invert
@@ -152,9 +109,6 @@ function enforceConstraints() {
     state.LimL = state.IT;
     elements.limLSlider.value = state.LimL;
   }
-
-  // Calculate constrained IC
-  calculateConstrainedIC();
 }
 // Calculate constrained IC based on viewport IC and limits
 function calculateConstrainedIC() {
@@ -377,7 +331,6 @@ function startDrag(target) {
   state.dragging = { type };
   target.classList.add("dragging");
   document.documentElement.style.cursor = "grabbing";
-  document.documentElement.classList.add("no-scroll");
 }
 
 function startHover(target) {
@@ -405,7 +358,6 @@ function endDrag() {
   const els = positionLayer.querySelectorAll(".position-marker.dragging");
   els.forEach((el) => el.classList.remove("dragging"));
   state.dragging = null;
-  document.documentElement.classList.remove("no-scroll");
 
   document.documentElement.style.cursor = "default";
 }
@@ -413,7 +365,6 @@ function endDrag() {
 function doDrag(clientX) {
   if (!state.dragging) return;
   const val = Math.max(0, Math.min(state.IT, pxToValue(clientX)));
-  console.log(`Dragging ${state.dragging.type}: ${val}`);
 
   switch (state.dragging.type) {
     case "icViewport":
@@ -493,38 +444,37 @@ function updateDisplay() {
   enforceConstraints();
   getEffectiveWinN();
   calculateWindowBoundaries();
-  detectConstraintIssues();
+  calculateConstrainedIC();
 
   // Update control values
-  elements.icViewportValue.textContent = `${state.IC_Viewport} (free: 0-${state.IT})`;
-  elements.winNValue.textContent =
-    `${state.WinN}` +
-    (state.effectiveWinN != state.WinN
-      ? ` (compensates to: ${state.effectiveWinN})`
-      : "");
-  elements.limLValue.textContent = `${
-    state.LimL
-  } (auto-adjusts with LimU: ${0}-${state.LimU})`;
-  elements.limUValue.textContent = `${state.LimU} (auto-adjusts with LimL: ${state.LimL}-${state.IT})`;
+  elements.icViewportValue.textContent = `${state.IC_Viewport}`;
+  elements.winNValue.textContent = `${state.WinN}`;
+  elements.limLValue.textContent = `${state.LimL}`;
+  elements.limUValue.textContent = `${state.LimU}`;
   elements.itValue.textContent = `${state.IT}`;
 
   // Update status
-  elements.icViewportStatus.textContent = state.IC_Viewport;
   elements.icConstrainedStatus.textContent = state.IC;
   elements.winUStatus.textContent = state.WinU;
   elements.winLStatus.textContent = state.WinL;
   elements.actualLength.textContent = state.WinU - state.WinL;
-  elements.requestedLength.textContent = state.WinN;
-  elements.effectiveLength.textContent = state.effectiveWinN;
-  elements.totalImages.textContent = state.IT;
 
   // Show/hide warnings
-  elements.winUWarning.style.display =
-    state.WinU > Math.min(state.LimU, state.IT) ? "block" : "none";
-  elements.winLWarning.style.display =
-    state.WinL < Math.max(state.LimL, 0) ? "block" : "none";
-  elements.compensatedIndicator.style.display =
-    state.WinN !== state.effectiveWinN ? "block" : "none";
+  if (state.WinN !== state.effectiveWinN) {
+    elements.actualLength.classList.add("orange-text");
+    elements.actualLength.classList.add("text-darken-2");
+  } else {
+    elements.actualLength.classList.remove("orange-text");
+    elements.actualLength.classList.remove("text-darken-2");
+  }
+
+  if (state.IC_Viewport !== state.IC) {
+    elements.icConstrainedStatus.classList.add("orange-text");
+    elements.icConstrainedStatus.classList.add("text-darken-2");
+  } else {
+    elements.icConstrainedStatus.classList.remove("orange-text");
+    elements.icConstrainedStatus.classList.remove("text-darken-2");
+  }
 
   // Update behavior status
   let behavior = "";
@@ -543,42 +493,6 @@ function updateDisplay() {
 
     if (state.WinN !== state.effectiveWinN) behavior += " + Length reduced";
   }
-  elements.behaviorStatus.textContent = behavior;
-
-  // Update configuration status
-  const isValid = state.issues.length === 0;
-  elements.configStatus.textContent = isValid ? "Valid" : "Invalid";
-  elements.configStatus.className = isValid
-    ? "status-value valid"
-    : "status-value invalid";
-
-  // Update errors
-  if (state.issues.length > 0) {
-    elements.errorSection.style.display = "block";
-    elements.errorList.innerHTML = state.issues
-      .map((issue) => `<li class="error-item">• ${issue}</li>`)
-      .join("");
-  } else {
-    elements.errorSection.style.display = "none";
-  }
-
-  // Update constraints text
-  elements.currentConstraints.textContent = `Current: 0 ≤ ${state.LimL} ≤ ${
-    state.IC
-  } ≤ ${state.LimU} ≤ ${state.IT}, ${state.WinU} - ${state.WinL} = ${
-    state.WinU - state.WinL
-  } (effective: ${state.effectiveWinN})`;
-  elements.icConstraintText.textContent = `IC = ${
-    state.IC
-  } (constrained by limits: ${Math.max(0, state.LimL)} ≤ IC ≤ ${Math.min(
-    state.IT,
-    state.LimU
-  )})`;
-  elements.lengthCompensationText.textContent = `Requested ${
-    state.WinN
-  } → Effective ${state.effectiveWinN} (limited by space: ${
-    state.LimU - state.LimL
-  })`;
 
   // Update viewport center text
   const viewportCenterText = document.getElementById("viewportCenterText");
@@ -588,42 +502,6 @@ function updateDisplay() {
 
   updateVisualization();
 }
-
-// Event handlers
-// elements.timelineTrack.addEventListener("mouseover", (e) => {
-//   document.documentElement.classList.add("no-scroll");
-// });
-
-// elements.timelineTrack.addEventListener("mouseout", (e) => {
-//   document.documentElement.classList.remove("no-scroll");
-// });
-
-// elements.timelineTrack.addEventListener("wheel", (e) => {
-//   // If scroll up
-
-//   if (e.altKey) {
-//     let step = 2;
-//     if (e.shiftKey) step = 6;
-//     if (e.deltaY < 0) {
-//       state.WinN = Math.min(state.WinN + step, elements.winNSlider.max);
-//     } else if (e.deltaY > 0) {
-//       state.WinN = Math.max(0, state.WinN - step);
-//     }
-
-//     elements.winNSlider.value = state.WinN;
-//   } else {
-//     let step = 1;
-//     if (e.shiftKey) step = 10;
-//     if (e.deltaY < 0) {
-//       state.IC_Viewport = Math.min(state.IC_Viewport + step, state.IT);
-//     } else if (e.deltaY > 0) {
-//       state.IC_Viewport = Math.max(0, state.IC_Viewport - step);
-//     }
-
-//     elements.icViewportSlider.value = state.IC_Viewport;
-//   }
-//   updateDisplay();
-// });
 
 elements.icViewportSlider.addEventListener("input", (e) => {
   state.IC_Viewport = parseInt(e.target.value);
